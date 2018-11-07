@@ -11,12 +11,14 @@
 #include "sprite_renderer.h"
 #include "game_object.h"
 #include "ball_object.h"
+#include "particle_generator.h"
 #include <iostream>
 
 // Game-related State data
-SpriteRenderer  *Renderer;
-GameObject      *Player;
-BallObject      *Ball;
+SpriteRenderer    *Renderer;
+GameObject        *Player;
+BallObject        *Ball;
+ParticleGenerator *Particles;
 
 // Collision detection
 GLboolean CheckCollision(GameObject &one, GameObject &two);
@@ -35,12 +37,14 @@ Game::~Game()
 	delete Renderer;
 	delete Player;
 	delete Ball;
+	delete Particles;
 }
 
 void Game::Init()
 {
 	// Load shaders
 	ResourceManager::LoadShader("shaders/sprite.vs", "shaders/sprite.frag", nullptr, "sprite");
+	ResourceManager::LoadShader("shaders/particle.vs", "shaders/particle.frag", nullptr, "particle");
 	// Configure shaders 
 	// 统一投影矩阵，因为是2D游戏，所以只需要制指定窗口尺寸，以及映射到的区间，就能保证
 	// 渲染时在窗口尺寸里的坐标都能正确显示，参数代表 左、右、下、上边界，
@@ -48,14 +52,18 @@ void Game::Init()
 	glm::mat4 projection = glm::ortho(0.0f, static_cast<GLfloat>(this->Width), static_cast<GLfloat>(this->Height), 0.0f, -1.0f, 1.0f);
 	ResourceManager::GetShader("sprite").Use().SetInteger("image", 0);
 	ResourceManager::GetShader("sprite").SetMatrix4("projection", projection);
+	ResourceManager::GetShader("particle").Use().SetInteger("sprite", 0);
+	ResourceManager::GetShader("particle").SetMatrix4("projection", projection);
 	// Load textures
 	ResourceManager::LoadTexture("textures/background.jpg", GL_FALSE, "background");
 	ResourceManager::LoadTexture("textures/awesomeface.png", GL_TRUE, "face");
 	ResourceManager::LoadTexture("textures/block.png", GL_FALSE, "block");
 	ResourceManager::LoadTexture("textures/block_solid.png", GL_FALSE, "block_solid");
 	ResourceManager::LoadTexture("textures/paddle.png", GL_TRUE, "paddle");
+	ResourceManager::LoadTexture("textures/particle.png", GL_TRUE, "particle");
 	// Set render-specific controls
 	Renderer = new SpriteRenderer(ResourceManager::GetShader("sprite"));
+	Particles = new ParticleGenerator(ResourceManager::GetShader("particle"), ResourceManager::GetTexture("particle"), 500);
 	// Load levels
 	// 保证所有的砖块在窗口的上半部分，所以使用的是 height * 0.5 
 	GameLevel one; one.Load("levels/one.lvl", this->Width, this->Height * 0.5);
@@ -85,6 +93,9 @@ void Game::Update(GLfloat dt)
 
 	//Check for collisions
 	this->DoCollisions();
+
+	// Update particles
+	Particles->Update(dt, *Ball, 2, glm::vec2(Ball->Radius / 2));
 
 	//Check for lossing game condition -- falling out of window range
 	if (Ball->Position.y >= this->Height) {
@@ -146,6 +157,8 @@ void Game::Render()
 		this->Levels[this->Level].Draw(*Renderer);
 		// Draw player
 		Player->Draw(*Renderer);
+		// Draw particles	
+		Particles->Draw();
 		// Draw ball
 		Ball->Draw(*Renderer);
 	}
